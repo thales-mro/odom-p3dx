@@ -1,0 +1,2 @@
+/usr/bin/ar qc libSMTR.a  CMakeFiles/SMTR.dir/Simulator.cpp.o
+/usr/bin/ranlib libSMTR.a

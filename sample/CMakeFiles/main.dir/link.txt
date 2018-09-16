@@ -1,0 +1,1 @@
+/usr/bin/c++      CMakeFiles/main.dir/Main.cpp.o  -o main -rdynamic -lpthread libRBOT.a -lssl -lcrypto -ldl -lboost_iostreams -lboost_system -lboost_filesystem libSMTR.a libVREP.a 

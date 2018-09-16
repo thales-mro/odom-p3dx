@@ -1,0 +1,1 @@
+/usr/bin/c++   -std=c++11 -stdlib=libc++   CMakeFiles/Main.dir/Main.cpp.o  -o Main -rdynamic -lpthread libRBOT.a libSMTR.a libVREP.a 
