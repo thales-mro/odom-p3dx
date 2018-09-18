@@ -33,6 +33,15 @@ extern "C" {
 
 using namespace std;
 
+Gnuplot gp;
+std::vector<std::pair<double, double> > robot_pos_gt;
+std::vector<std::pair<double, double>> obstacle_points;
+std::vector<std::pair<double, double>> robot_odometry;
+double robot_odom_orn;
+double sumX = 0;
+double sumY = 0;
+double sumOrn = 0;
+
 double calculateAngleDiff(double posAngle, double negAngle) {
 	double diff;
 
@@ -70,9 +79,7 @@ double convertSensorPosToAngle(int pos) {
 			angle = -90;
 		break;
 	}
-	std::cout << "angle pos: " << angle << std::endl;
 	double convAngle = double(angle*M_PI)/180.0;
-	std::cout << convAngle << std::endl;
 	return convAngle;
 }
 
@@ -85,29 +92,33 @@ std::pair<double, double> convertSensorDistToGlobalFrame(simxFloat x_robot, simx
 	//return make_pair<double, double>(x_coord, y_coord);
 }
 
-Gnuplot gp;
-std::vector<std::pair<double, double> > robot_pos_gt;
-std::vector<std::pair<double, double>> obstacle_points;
-std::vector<std::pair<double, double>> robot_odometry;
-
-void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings) {
+void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings, double deltaThetaLeft, double deltaThetaRight) {
 	
 	if(robot_pos[2] == 0.0f)
 		return;
 
 	for(int i = 0; i < 8; i++) {
 		if(sensorReadings[i] != -1) {
-			cout << i << endl;
 			obstacle_points.push_back(convertSensorDistToGlobalFrame(robot_pos[0], robot_pos[1], robot_orn, convertSensorPosToAngle(i), sensorReadings[i], 0.0975));
 		}
 	}
+
+	double deltaS = 0.0975*(deltaThetaRight + deltaThetaLeft)/2;
+	double deltaTheta = 0.0975*(deltaThetaRight - deltaThetaLeft)/(2*0.36205);
+	pair<double, double> pose = robot_odometry[0];
+
+	sumX += deltaS*cos(sumOrn + (deltaTheta/2));
+	cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS << endl; 	
+	sumY += deltaS*sin(sumOrn + (deltaTheta/2));
+	sumOrn += deltaTheta;
+
 	//for(double alpha=0; alpha<1; alpha+=1.0/24.0) {
 	//	double theta = alpha*2.0*3.14159;
 	//	xy_pts_B.push_back(std::make_pair(cos(theta), sin(theta)));
 	//}
 
 	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
-	robot_odometry.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1]) + 1));
+	robot_odometry.push_back(std::make_pair(sumX + pose.first, sumY + pose.second));
 	gp << "set xrange [-7:7]\nset yrange [-7:7]\n";
 	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
 	//gp.send1d(xy_pts_A);
@@ -155,6 +166,9 @@ int main(int argc, char *argv[]){
 	robot->updatePose();
 	std::vector<simxFloat> starting_pos = robot->getRobotPos();
 	simxFloat starting_orn = robot->getRobotOrn()[2];
+	robot_odometry.push_back(make_pair<double, double>(starting_pos[0], starting_pos[1]));
+	robot_odom_orn = starting_orn;
+
 	vrep->getJointPosition(lMotorHandle, &encoderLeft);
 	vrep->getJointPosition(rMotorHandle, &encoderRight);
 
@@ -185,8 +199,6 @@ int main(int argc, char *argv[]){
 			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
 		}
 
-		if(deltaThetaLeft != 0)
-			cout << "Diff Value: " << deltaThetaLeft << endl; 
 		
 		encoderLeft = auxLeft;
 		encoderRight = auxRight;
@@ -198,7 +210,7 @@ int main(int argc, char *argv[]){
 		robot->writeGT();
 		usleep(sleep_us);
 
-		//printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings);
+		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
 	vrep->disconnect();
