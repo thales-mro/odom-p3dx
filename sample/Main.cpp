@@ -119,7 +119,7 @@ void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat
 
 	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
 	robot_odometry.push_back(std::make_pair(sumX + pose.first, sumY + pose.second));
-	gp << "set xrange [-7:7]\nset yrange [-7:7]\n";
+	gp << "set xrange [-10:10]\nset yrange [-15:5]\n";
 	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
 	//gp.send1d(xy_pts_A);
 	gp.send1d(robot_pos_gt);
@@ -177,7 +177,7 @@ int main(int argc, char *argv[]){
 	double vLento = 1.0;
 
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
-		robot->updateSensors();
+	robot->updateSensors();
 		std::vector<float> sonarReadings = robot->getSonarReadings();
 		robot->updatePose();
 		std::vector<simxFloat> robot_pos = robot->getRobotPos();
@@ -188,7 +188,28 @@ int main(int argc, char *argv[]){
 		double deltaThetaLeft = auxLeft - encoderLeft;
 		double deltaThetaRight = auxRight - encoderRight;
 
-		if(auxLeft > 3.0 && encoderLeft < 0) {
+		if(auxLeft > M_PI/2 && encoderLeft < 0) {
+			deltaThetaLeft = -1*calculateAngleDiff(auxLeft, encoderLeft);
+		}
+		if(encoderLeft > M_PI/2 && auxLeft < 0) {
+			deltaThetaLeft = calculateAngleDiff(encoderLeft, auxLeft);
+		}
+		if(auxRight > M_PI/2 && encoderRight < 0) {
+			deltaThetaRight = -1*calculateAngleDiff(auxRight, encoderRight);
+		}
+		if(encoderRight > M_PI/2 && auxRight < 0) {
+			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
+		}
+
+		if(deltaThetaLeft > 5) {
+		cout << "------------------------------" << endl;
+		cout << "Left " << auxLeft << " " << encoderLeft << endl;
+		}
+		if(deltaThetaRight > 5) {
+		cout << "------------------------------" << endl;
+		cout << "Right " << auxRight << " " << encoderRight << endl;
+		}
+		/*if(auxLeft > 3.0 && encoderLeft < 0) {
 			deltaThetaLeft = calculateAngleDiff(auxLeft, encoderLeft);
 		}
 		if(encoderLeft > 3.0 && auxLeft < 0) {
@@ -201,7 +222,7 @@ int main(int argc, char *argv[]){
 		}
 		if(encoderRight > 3.0 && auxRight < 0) {
 			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
-		}
+		}*/
 
 		
 		encoderLeft = auxLeft;
@@ -215,11 +236,29 @@ int main(int argc, char *argv[]){
 
 		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
 
-		if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.3) {
+		vrep->setJointTargetVelocity(lMotorHandle, 0);
+		vrep->setJointTargetVelocity(rMotorHandle, 0);
+
+		if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
+			if(sonarReadings[7] > 0.3 || sonarReadings[7] == -1) {
+				vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+				vrep->setJointTargetVelocity(rMotorHandle, 0);
+			}
+			else if(sonarReadings[0] > 0.3 || sonarReadings[0] == -1) {
+				vrep->setJointTargetVelocity(lMotorHandle, 0);
+				vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+			}
+		}
+		else {
 			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
 		}
-		else if(sonarReadings[7] > 0.3) {
+		
+		/*if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.15) {
+			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+		}
+		else if(sonarReadings[7] > 0.15) {
 			vrep->setJointTargetVelocity(lMotorHandle, vMedio);
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
@@ -227,18 +266,23 @@ int main(int argc, char *argv[]){
 			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
-		
-		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.45) {
-			vrep->setJointTargetVelocity(lMotorHandle, vLento);
-			vrep->setJointTargetVelocity(rMotorHandle, vMedio);
-		}
 
-		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.30) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.3)) {
+		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.1) {
 			vrep->setJointTargetVelocity(lMotorHandle, 0);
-			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
 
+		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.25	) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.25)) {
+			vrep->setJointTargetVelocity(lMotorHandle, 0);
+			vrep->setJointTargetVelocity(rMotorHandle, vLento);
+		}	
+		*/
 
+		int idx = 0;
+		/*for(const auto sensorReading: sonarReadings) {
+			cout << idx << " " << sensorReading << endl;
+			idx++;
+		}*/
 
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
