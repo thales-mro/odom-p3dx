@@ -108,7 +108,7 @@ void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat
 	pair<double, double> pose = robot_odometry[0];
 
 	sumX += deltaS*cos(sumOrn + (deltaTheta/2));
-	cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS << endl; 	
+	//cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS << endl; 	
 	sumY += deltaS*sin(sumOrn + (deltaTheta/2));
 	sumOrn += deltaTheta;
 
@@ -161,7 +161,7 @@ int main(int argc, char *argv[]){
 
 	static bool ad_infinitum=false;
 	static unsigned int i_max=3000*56;
-	static unsigned int sleep_us=20000;
+	static unsigned int sleep_us=2000;
 	
 	robot->updatePose();
 	std::vector<simxFloat> starting_pos = robot->getRobotPos();
@@ -171,6 +171,10 @@ int main(int argc, char *argv[]){
 
 	vrep->getJointPosition(lMotorHandle, &encoderLeft);
 	vrep->getJointPosition(rMotorHandle, &encoderRight);
+
+	double vRapido = 3.0;
+	double vMedio = 2.0;
+	double vLento = 1.0;
 
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
 		robot->updateSensors();
@@ -206,11 +210,36 @@ int main(int argc, char *argv[]){
 		simxUChar state;
 		simxFloat coord[3];
 
-		//std::cout << "Sensor 1 reading" << coord[0] << " " << coord[1] << " " << coord[2] << std::endl;
 		robot->writeGT();
 		usleep(sleep_us);
 
 		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
+
+		if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.3) {
+			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+		}
+		else if(sonarReadings[7] > 0.3) {
+			vrep->setJointTargetVelocity(lMotorHandle, vMedio);
+			vrep->setJointTargetVelocity(rMotorHandle, vLento);
+		}
+		else if(sonarReadings[7] == -1) {
+			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+			vrep->setJointTargetVelocity(rMotorHandle, vLento);
+		}
+		
+		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.45) {
+			vrep->setJointTargetVelocity(lMotorHandle, vLento);
+			vrep->setJointTargetVelocity(rMotorHandle, vMedio);
+		}
+
+		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.30) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.3)) {
+			vrep->setJointTargetVelocity(lMotorHandle, 0);
+			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+		}
+
+
+
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
 	vrep->disconnect();
