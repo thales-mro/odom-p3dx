@@ -29,6 +29,19 @@ extern "C" {
 	#include "extApi.h"
 	#include "v_repLib.h"
 }
+
+
+using namespace std;
+
+double calculateAngleDiff(double posAngle, double negAngle) {
+	double diff;
+
+	diff = (M_PI - posAngle) + (M_PI + negAngle);
+
+	return diff;
+}
+
+
 double convertSensorPosToAngle(int pos) {
 	int angle;
 	switch(pos) {
@@ -72,10 +85,10 @@ std::pair<double, double> convertSensorDistToGlobalFrame(simxFloat x_robot, simx
 	//return make_pair<double, double>(x_coord, y_coord);
 }
 
-using namespace std;
 Gnuplot gp;
-std::vector<std::pair<double, double> > robot_pose_over_time;
+std::vector<std::pair<double, double> > robot_pos_gt;
 std::vector<std::pair<double, double>> obstacle_points;
+std::vector<std::pair<double, double>> robot_odometry;
 
 void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings) {
 	
@@ -93,20 +106,18 @@ void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat
 	//	xy_pts_B.push_back(std::make_pair(cos(theta), sin(theta)));
 	//}
 
-	robot_pose_over_time.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
+	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
+	robot_odometry.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1]) + 1));
 	gp << "set xrange [-7:7]\nset yrange [-7:7]\n";
-	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles'\n";
+	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
 	//gp.send1d(xy_pts_A);
-	gp.send1d(robot_pose_over_time);
+	gp.send1d(robot_pos_gt);
 	gp.send1d(obstacle_points);
+	gp.send1d(robot_odometry);
 }
 
 
 int main(int argc, char *argv[]){
-
-	cout << "ou" << endl;
-	//std::cin.sync_with_stdio(false);
-	//std::ios::sync_with_stdio(false);
 	DBG("Debugging is ON");
 	
 	std::signal(SIGINT, signal_handler);
@@ -135,33 +146,59 @@ int main(int argc, char *argv[]){
 	vrep->setJointTargetVelocity(lMotorHandle, 3);
 	vrep->setJointTargetVelocity(rMotorHandle, 3);
 	int sonarHandling = vrep->getHandle("Pioneer_p3dx_ultrasonicSensor1");
+	simxFloat encoderRight, encoderLeft, auxRight, auxLeft;
 
 	static bool ad_infinitum=false;
 	static unsigned int i_max=3000*56;
-	static unsigned int sleep_us=2000;
+	static unsigned int sleep_us=20000;
 	
+	robot->updatePose();
+	std::vector<simxFloat> starting_pos = robot->getRobotPos();
+	simxFloat starting_orn = robot->getRobotOrn()[2];
+	vrep->getJointPosition(lMotorHandle, &encoderLeft);
+	vrep->getJointPosition(rMotorHandle, &encoderRight);
+
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
 		robot->updateSensors();
 		std::vector<float> sonarReadings = robot->getSonarReadings();
-		//cout << "--------------------------------------------" << endl;
-		//for(float sonarReading : sonarReadings) {
-		//	std::cout << sonarReading << std::endl;
-		//}
-		std::vector<simxFloat> robot_pos = robot->getRobotPos();
 		robot->updatePose();
-		//std::cout << "Robot gt pos: " << robot_pos[0] << " " << robot_pos[1] << " " << robot_pos[2] << std::endl;
+		std::vector<simxFloat> robot_pos = robot->getRobotPos();
+
+		vrep->getJointPosition(lMotorHandle, &auxLeft);
+		vrep->getJointPosition(rMotorHandle, &auxRight);
+
+		double deltaThetaLeft = auxLeft - encoderLeft;
+		double deltaThetaRight = auxRight - encoderRight;
+
+		if(auxLeft > 3.0 && encoderLeft < 0) {
+			deltaThetaLeft = calculateAngleDiff(auxLeft, encoderLeft);
+		}
+		if(encoderLeft > 3.0 && auxLeft < 0) {
+			deltaThetaLeft = calculateAngleDiff(encoderLeft, auxLeft);
+		}
+		
+
+		if(auxRight > 3.0 && encoderRight < 0) {
+			deltaThetaRight = calculateAngleDiff(auxRight, encoderRight);
+		}
+		if(encoderRight > 3.0 && auxRight < 0) {
+			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
+		}
+
+		if(deltaThetaLeft != 0)
+			cout << "Diff Value: " << deltaThetaLeft << endl; 
+		
+		encoderLeft = auxLeft;
+		encoderRight = auxRight;
+
 		simxUChar state;
 		simxFloat coord[3];
 
 		//std::cout << "Sensor 1 reading" << coord[0] << " " << coord[1] << " " << coord[2] << std::endl;
-
-		//robot->move(4, 0);
 		robot->writeGT();
-		//robot->writeSonars();
-		//extApi_sleepMs(50);
 		usleep(sleep_us);
 
-		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings);
+		//printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings);
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
 	vrep->disconnect();
