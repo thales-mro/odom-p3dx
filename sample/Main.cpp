@@ -89,7 +89,6 @@ std::pair<double, double> convertSensorDistToGlobalFrame(simxFloat x_robot, simx
 	std::pair<double, double> position;
 	position = std::make_pair(x_coord, y_coord);
 	return position;
-	//return make_pair<double, double>(x_coord, y_coord);
 }
 
 void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings, double deltaThetaLeft, double deltaThetaRight) {
@@ -108,23 +107,28 @@ void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat
 	pair<double, double> pose = robot_odometry[0];
 
 	sumX += deltaS*cos(sumOrn + (deltaTheta/2));
-	//cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS << endl; 	
+	//cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS  << " " << endl; 	
 	sumY += deltaS*sin(sumOrn + (deltaTheta/2));
+	//cout
+	cout << "sumX:" << sumX << endl;
 	sumOrn += deltaTheta;
+	cout << "aggr: " << sumOrn << endl;
+	if(sumOrn < -(M_PI*2)) {
+		sumOrn += (M_PI*2);
+	}
+	if(sumOrn > (M_PI*2)) {
+		sumOrn -= (M_PI*2);
+	}
 
-	//for(double alpha=0; alpha<1; alpha+=1.0/24.0) {
-	//	double theta = alpha*2.0*3.14159;
-	//	xy_pts_B.push_back(std::make_pair(cos(theta), sin(theta)));
-	//}
 
 	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
 	robot_odometry.push_back(std::make_pair(sumX + pose.first, sumY + pose.second));
 	gp << "set xrange [-10:10]\nset yrange [-15:5]\n";
 	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
-	//gp.send1d(xy_pts_A);
+
 	gp.send1d(robot_pos_gt);
 	gp.send1d(obstacle_points);
-	gp.send1d(robot_odometry);
+	gp.send1d(robot_odometry);	
 }
 
 
@@ -161,7 +165,7 @@ int main(int argc, char *argv[]){
 
 	static bool ad_infinitum=false;
 	static unsigned int i_max=3000*56;
-	static unsigned int sleep_us=2000;
+	static unsigned int sleep_us=200000;
 	
 	robot->updatePose();
 	std::vector<simxFloat> starting_pos = robot->getRobotPos();
@@ -175,6 +179,9 @@ int main(int argc, char *argv[]){
 	double vRapido = 3.0;
 	double vMedio = 2.0;
 	double vLento = 1.0;
+
+	vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+	vrep->setJointTargetVelocity(rMotorHandle, 0);
 
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
 	robot->updateSensors();
@@ -201,30 +208,15 @@ int main(int argc, char *argv[]){
 			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
 		}
 
-		if(deltaThetaLeft > 5) {
-		cout << "------------------------------" << endl;
+		//if(deltaThetaLeft > 5) {
+		//cout << "------------------------------" << endl;
 		cout << "Left " << auxLeft << " " << encoderLeft << endl;
-		}
-		if(deltaThetaRight > 5) {
-		cout << "------------------------------" << endl;
+		//}
+		//if(deltaThetaRight > 5) {
+		//cout << "------------------------------" << endl;
 		cout << "Right " << auxRight << " " << encoderRight << endl;
-		}
-		/*if(auxLeft > 3.0 && encoderLeft < 0) {
-			deltaThetaLeft = calculateAngleDiff(auxLeft, encoderLeft);
-		}
-		if(encoderLeft > 3.0 && auxLeft < 0) {
-			deltaThetaLeft = calculateAngleDiff(encoderLeft, auxLeft);
-		}
-		
+		//}
 
-		if(auxRight > 3.0 && encoderRight < 0) {
-			deltaThetaRight = calculateAngleDiff(auxRight, encoderRight);
-		}
-		if(encoderRight > 3.0 && auxRight < 0) {
-			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
-		}*/
-
-		
 		encoderLeft = auxLeft;
 		encoderRight = auxRight;
 
@@ -233,11 +225,6 @@ int main(int argc, char *argv[]){
 
 		robot->writeGT();
 		usleep(sleep_us);
-
-		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
-
-		vrep->setJointTargetVelocity(lMotorHandle, 0);
-		vrep->setJointTargetVelocity(rMotorHandle, 0);
 
 		if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
 			if(sonarReadings[7] > 0.3 || sonarReadings[7] == -1) {
@@ -254,6 +241,9 @@ int main(int argc, char *argv[]){
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
 		}
 		
+		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
+
+
 		/*if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.15) {
 			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
