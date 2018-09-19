@@ -34,12 +34,18 @@ extern "C" {
 using namespace std;
 
 Gnuplot gp;
+//vector that stores robot`s x & y ground truth coordinates over time
 std::vector<std::pair<double, double> > robot_pos_gt;
+//vector that stores points identified by ultrasonic sensots
 std::vector<std::pair<double, double>> obstacle_points;
+//vector that stores robot`s x & y coordinates calculated through odometry
 std::vector<std::pair<double, double>> robot_odometry;
 double robot_odom_orn;
+//cumulative sum on x axis coordinates(for odometry)
 double sumX = 0;
+//cumulative sum on y axis coordinates(for odometry)
 double sumY = 0;
+//cumulative sum on z axis rotation (for odometry)
 double sumOrn = 0;
 
 double calculateAngleDiff(double posAngle, double negAngle) {
@@ -91,41 +97,44 @@ std::pair<double, double> convertSensorDistToGlobalFrame(simxFloat x_robot, simx
 	return position;
 }
 
-void printGnuplot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings, double deltaThetaLeft, double deltaThetaRight) {
+void calculatesOdomAndPlot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings, double deltaThetaLeft, double deltaThetaRight) {
 	
-	if(robot_pos[2] == 0.0f)
+	if(robot_pos[2] == 0.0f) {
+		cout << "@@@@@@@@@@@@@@@@@@@@@@@@" << endl;
 		return;
+	}
 
+	//adds ground truth info from this iteration	
+	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
+
+	//calculates point cloud according to ultrasonic sensor readings
 	for(int i = 0; i < 8; i++) {
 		if(sensorReadings[i] != -1) {
 			obstacle_points.push_back(convertSensorDistToGlobalFrame(robot_pos[0], robot_pos[1], robot_orn, convertSensorPosToAngle(i), sensorReadings[i], 0.0975));
 		}
 	}
 
-	double deltaS = 0.0975*(deltaThetaRight + deltaThetaLeft)/2;
-	double deltaTheta = 0.0975*(deltaThetaRight - deltaThetaLeft)/(2*0.36205);
+	//calculates Odometry from kinematic model
+	double R = 0.0975;
+	double L = 0.36205;
+	double deltaS = R*(deltaThetaRight + deltaThetaLeft)/2;
+	double deltaTheta = R*(deltaThetaRight - deltaThetaLeft)/(2*L);
 	pair<double, double> pose = robot_odometry[0];
 
 	sumX += deltaS*cos(sumOrn + (deltaTheta/2));
-	//cout << "delta Theta: " << deltaTheta << "deltaS: " << deltaS  << " " << endl; 	
 	sumY += deltaS*sin(sumOrn + (deltaTheta/2));
-	//cout
-	cout << "sumX:" << sumX << endl;
 	sumOrn += deltaTheta;
-	cout << "aggr: " << sumOrn << endl;
 	if(sumOrn < -(M_PI*2)) {
 		sumOrn += (M_PI*2);
 	}
 	if(sumOrn > (M_PI*2)) {
 		sumOrn -= (M_PI*2);
 	}
-
-
-	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
 	robot_odometry.push_back(std::make_pair(sumX + pose.first, sumY + pose.second));
+	
+	//plots data
 	gp << "set xrange [-10:10]\nset yrange [-15:5]\n";
 	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
-
 	gp.send1d(robot_pos_gt);
 	gp.send1d(obstacle_points);
 	gp.send1d(robot_odometry);	
@@ -172,7 +181,7 @@ int main(int argc, char *argv[]){
 	simxFloat starting_orn = robot->getRobotOrn()[2];
 	robot_odometry.push_back(make_pair<double, double>(starting_pos[0], starting_pos[1]));
 	robot_odom_orn = starting_orn;
-
+	sumOrn = robot_odom_orn;
 	vrep->getJointPosition(lMotorHandle, &encoderLeft);
 	vrep->getJointPosition(rMotorHandle, &encoderRight);
 
@@ -184,17 +193,20 @@ int main(int argc, char *argv[]){
 	vrep->setJointTargetVelocity(rMotorHandle, 0);
 
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
-	robot->updateSensors();
+		robot->updateSensors();
 		std::vector<float> sonarReadings = robot->getSonarReadings();
 		robot->updatePose();
+		//it gets robot`s ground truth
 		std::vector<simxFloat> robot_pos = robot->getRobotPos();
 
+		//it gets encoder`s positions and calculates angle variation from one timestamp to another
 		vrep->getJointPosition(lMotorHandle, &auxLeft);
 		vrep->getJointPosition(rMotorHandle, &auxRight);
 
 		double deltaThetaLeft = auxLeft - encoderLeft;
 		double deltaThetaRight = auxRight - encoderRight;
 
+		//it corrects angle`s discontinuity
 		if(auxLeft > M_PI/2 && encoderLeft < 0) {
 			deltaThetaLeft = -1*calculateAngleDiff(auxLeft, encoderLeft);
 		}
@@ -208,24 +220,13 @@ int main(int argc, char *argv[]){
 			deltaThetaRight = calculateAngleDiff(encoderRight, auxRight);
 		}
 
-		//if(deltaThetaLeft > 5) {
-		//cout << "------------------------------" << endl;
-		cout << "Left " << auxLeft << " " << encoderLeft << endl;
-		//}
-		//if(deltaThetaRight > 5) {
-		//cout << "------------------------------" << endl;
-		cout << "Right " << auxRight << " " << encoderRight << endl;
-		//}
-
 		encoderLeft = auxLeft;
 		encoderRight = auxRight;
-
-		simxUChar state;
-		simxFloat coord[3];
 
 		robot->writeGT();
 		usleep(sleep_us);
 
+		//"dumb" controller
 		if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
 			if(sonarReadings[7] > 0.3 || sonarReadings[7] == -1) {
 				vrep->setJointTargetVelocity(lMotorHandle, vRapido);
@@ -241,7 +242,7 @@ int main(int argc, char *argv[]){
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
 		}
 		
-		printGnuplot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
+		calculatesOdomAndPlot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
 
 
 		/*if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.15) {
@@ -267,12 +268,6 @@ int main(int argc, char *argv[]){
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}	
 		*/
-
-		int idx = 0;
-		/*for(const auto sensorReading: sonarReadings) {
-			cout << idx << " " << sensorReading << endl;
-			idx++;
-		}*/
 
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
