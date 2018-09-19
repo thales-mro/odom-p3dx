@@ -128,7 +128,7 @@ void calculatesOdomAndPlot(vector<simxFloat> robot_pos, float robot_orn, vector<
 	robot_odometry.push_back(std::make_pair(sumX + pose.first, sumY + pose.second));
 	
 	//plots data
-	gp << "set xrange [-10:10]\nset yrange [-15:5]\n";
+	gp << "set xrange [-10:10]\nset yrange [-10:10]\n";
 	gp << "plot '-' with lines title 'gtTrajectory', '-' with points title 'Obstacles', '-' with lines title 'odometry trajectory'\n";
 	gp.send1d(robot_pos_gt);
 	gp.send1d(obstacle_points);
@@ -219,6 +219,7 @@ int main(int argc, char *argv[]){
 		encoderRight = auxRight;
 
 		robot->writeGT();
+		robot->writeSonars();
 
 		//"dumb" controller
 		/*if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
@@ -247,11 +248,11 @@ int main(int argc, char *argv[]){
 			if((sonarReadings[3] > 0.0 && sonarReadings[3] < 0.15) || (sonarReadings[4] > 0.0 && sonarReadings[4] < 0.15)) {
 				vrep->setJointTargetVelocity(lMotorHandle, 0);
 				vrep->setJointTargetVelocity(rMotorHandle, 0);
-				if(sonarReadings[7] < 0.0 || sonarReadings[7] > 0.50) {
+				if(sonarReadings[7] < 0.0 || sonarReadings[7] > 1) {
 					vrep->setJointTargetVelocity(lMotorHandle, vLento);
 					vrep->setJointTargetVelocity(rMotorHandle, 0);
 				}
-				else if(sonarReadings[0] < 0.0 || sonarReadings[0] > 0.50) {
+				else if(sonarReadings[0] < 0.0 || sonarReadings[0] > 1) {
 					vrep->setJointTargetVelocity(lMotorHandle, 0);
 					vrep->setJointTargetVelocity(rMotorHandle, vLento);
 				}
@@ -279,36 +280,6 @@ int main(int argc, char *argv[]){
 				}
 			}
 		}
-		/*if(abs(deltaThetaLeft) < 0.001 && abs(deltaThetaRight) < 0.001) {
-			for(int i = 0; i < 200000; i++) {
-				vrep->setJointTargetVelocity(lMotorHandle, -1*vLento);
-				vrep->setJointTargetVelocity(rMotorHandle, -1*vLento);
-			}
-		}*/
-
-		/*if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.15) {
-			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
-			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
-		}
-		else if(sonarReadings[7] > 0.25) {
-			vrep->setJointTargetVelocity(lMotorHandle, vMedio);
-			vrep->setJointTargetVelocity(rMotorHandle, vLento);
-		}
-		else if(sonarReadings[7] == -1) {
-			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
-			vrep->setJointTargetVelocity(rMotorHandle, vLento);
-		}
-
-		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.4) {
-			vrep->setJointTargetVelocity(lMotorHandle, 0);
-			vrep->setJointTargetVelocity(rMotorHandle, vLento);
-		}
-
-		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.35	) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.35)) {
-			vrep->setJointTargetVelocity(lMotorHandle, 0);
-			vrep->setJointTargetVelocity(rMotorHandle, vLento);
-		}	
-		*/
 		cout << "-----------------------------------------" << endl;
 		for(int i = 0; i < 8; i++) {
 			cout << i << ": " << sonarReadings[i] << endl;
