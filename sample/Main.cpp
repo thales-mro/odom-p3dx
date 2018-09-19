@@ -99,11 +99,6 @@ std::pair<double, double> convertSensorDistToGlobalFrame(simxFloat x_robot, simx
 
 void calculatesOdomAndPlot(vector<simxFloat> robot_pos, float robot_orn, vector<simxFloat> sensorReadings, double deltaThetaLeft, double deltaThetaRight) {
 	
-	if(robot_pos[2] == 0.0f) {
-		cout << "@@@@@@@@@@@@@@@@@@@@@@@@" << endl;
-		return;
-	}
-
 	//adds ground truth info from this iteration	
 	robot_pos_gt.push_back(std::make_pair(double(robot_pos[0]), double(robot_pos[1])));
 
@@ -189,7 +184,7 @@ int main(int argc, char *argv[]){
 	double vMedio = 2.0;
 	double vLento = 1.0;
 
-	vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+	vrep->setJointTargetVelocity(lMotorHandle, 0);
 	vrep->setJointTargetVelocity(rMotorHandle, 0);
 
 	for (int i=0;(gSignalStatus!=SIGINT) && (ad_infinitum||i<i_max);++i){
@@ -224,10 +219,9 @@ int main(int argc, char *argv[]){
 		encoderRight = auxRight;
 
 		robot->writeGT();
-		usleep(sleep_us);
 
 		//"dumb" controller
-		if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
+		/*if((sonarReadings[3] != -1 && sonarReadings[3] < 0.4) || (sonarReadings[4] != -1 && sonarReadings[4] < 0.4)) {
 			if(sonarReadings[7] > 0.3 || sonarReadings[7] == -1) {
 				vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 				vrep->setJointTargetVelocity(rMotorHandle, 0);
@@ -240,16 +234,63 @@ int main(int argc, char *argv[]){
 		else {
 			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
-		}
+		}*/
 		
 		calculatesOdomAndPlot(robot_pos, robot->getRobotOrn()[2], sonarReadings, deltaThetaLeft, deltaThetaRight);
 
+		if(abs(deltaThetaLeft) < 0.001 && abs(deltaThetaRight) < 0.001) {
+			vrep->setJointTargetVelocity(lMotorHandle, -1*vRapido);
+			vrep->setJointTargetVelocity(rMotorHandle, -1*vRapido);
+			usleep(100);
+		}
+		else {
+			if((sonarReadings[3] > 0.0 && sonarReadings[3] < 0.15) || (sonarReadings[4] > 0.0 && sonarReadings[4] < 0.15)) {
+				vrep->setJointTargetVelocity(lMotorHandle, 0);
+				vrep->setJointTargetVelocity(rMotorHandle, 0);
+				if(sonarReadings[7] < 0.0 || sonarReadings[7] > 0.50) {
+					vrep->setJointTargetVelocity(lMotorHandle, vLento);
+					vrep->setJointTargetVelocity(rMotorHandle, 0);
+				}
+				else if(sonarReadings[0] < 0.0 || sonarReadings[0] > 0.50) {
+					vrep->setJointTargetVelocity(lMotorHandle, 0);
+					vrep->setJointTargetVelocity(rMotorHandle, vLento);
+				}
+				else 
+					cout << "Parouuuuuuuuuuuuuuuuuuuuu" << endl;
+			}
+			else {
+				if(sonarReadings[5] > 0 && sonarReadings[5] < 0.35){
+					vrep->setJointTargetVelocity(lMotorHandle, 0);
+					vrep->setJointTargetVelocity(rMotorHandle, vLento);
+				}
+				else {
+					if(sonarReadings[7] > 0.0 && sonarReadings[7] < 0.20) {
+						vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+						vrep->setJointTargetVelocity(rMotorHandle, vRapido);
+					}
+					else if(sonarReadings[7] > 0.20) {
+						vrep->setJointTargetVelocity(lMotorHandle, vMedio);
+						vrep->setJointTargetVelocity(rMotorHandle, vLento);
+					}
+					else if(sonarReadings[7] < 0.0){
+						vrep->setJointTargetVelocity(lMotorHandle, vRapido);
+						vrep->setJointTargetVelocity(rMotorHandle, vLento);
+					}
+				}
+			}
+		}
+		/*if(abs(deltaThetaLeft) < 0.001 && abs(deltaThetaRight) < 0.001) {
+			for(int i = 0; i < 200000; i++) {
+				vrep->setJointTargetVelocity(lMotorHandle, -1*vLento);
+				vrep->setJointTargetVelocity(rMotorHandle, -1*vLento);
+			}
+		}*/
 
 		/*if(sonarReadings[7] > 0.1 && sonarReadings[7] < 0.15) {
 			vrep->setJointTargetVelocity(lMotorHandle, vRapido);
 			vrep->setJointTargetVelocity(rMotorHandle, vRapido);
 		}
-		else if(sonarReadings[7] > 0.15) {
+		else if(sonarReadings[7] > 0.25) {
 			vrep->setJointTargetVelocity(lMotorHandle, vMedio);
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
@@ -258,17 +299,21 @@ int main(int argc, char *argv[]){
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
 
-		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.1) {
+		if(sonarReadings[6] != -1 && sonarReadings[6] < 0.4) {
 			vrep->setJointTargetVelocity(lMotorHandle, 0);
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}
 
-		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.25	) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.25)) {
+		if((sonarReadings[4] != -1 && sonarReadings[4] < 0.35	) || (sonarReadings[5] != -1 && sonarReadings[5] < 0.35)) {
 			vrep->setJointTargetVelocity(lMotorHandle, 0);
 			vrep->setJointTargetVelocity(rMotorHandle, vLento);
 		}	
 		*/
-
+		cout << "-----------------------------------------" << endl;
+		for(int i = 0; i < 8; i++) {
+			cout << i << ": " << sonarReadings[i] << endl;
+		}
+		usleep(sleep_us);
 	}
 	std::cout<<std::endl<<"Disconnecting..."<<std::endl;
 	vrep->disconnect();
